@@ -9,6 +9,7 @@ import math
 import traceback
 from tools.parse_arg_train import TrainOptions
 from tools.parse_arg_val import ValOptions
+from lib.models.image_transfer import resize_image
 
 logger = setup_logging(__name__)
 
@@ -49,6 +50,7 @@ def train(train_dataloader, model, epoch, loss_func,
         if step % cfg.TRAIN.VAL_STEP == 0 and step != 0 and val_dataloader is not None:
             model.eval()
             val_err[0] = val(val_dataloader, model)
+            print('val_err:', val_err)
             # training mode
             model.train()
 

@@ -11,7 +11,8 @@ class CustomerDataLoader():
             self.dataset,
             batch_size=opt.batchsize,
             shuffle=True if 'train' in opt.phase else False,
-            num_workers=opt.thread)
+            num_workers=opt.thread,
+            drop_last=True)
 
     def load_data(self):
         return self
