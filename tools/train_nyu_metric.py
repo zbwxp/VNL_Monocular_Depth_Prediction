@@ -36,11 +36,11 @@ def train(train_dataloader, model, epoch, loss_func,
     for i, data in enumerate(train_dataloader):
         if ignore_step != -1 and i > epoch_steps - ignore_step:
             return
-        scheduler.step()  # decay lr every iteration
         training_stats.IterTic()
         out = model(data)
         losses = loss_func.criterion(out['b_fake_softmax'], out['b_fake_logit'], data, epoch)
         optimizer.optim(losses)
+        scheduler.step()  # decay lr every iteration
         step = base_steps + i + 1
         training_stats.UpdateIterStats(losses)
         training_stats.IterToc()
@@ -124,7 +124,7 @@ if __name__=='__main__':
         logger.info('{:>15}: {:<30}'.format('total_iterations', total_iters))
         model.cuda()
 
-    optimizer = ModelOptimizer(model)
+    optimizer = ModelOptimizer_adamw(model)
     loss_func = ModelLoss()
 
     val_err = [{'abs_rel': 0}]

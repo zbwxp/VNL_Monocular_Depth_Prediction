@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 from . import lateral_net as lateral_net
 from lib.utils.net_tools import get_func
@@ -7,13 +8,14 @@ from lib.models.WCEL_loss import WCEL_Loss
 from lib.models.VNL_loss import VNL_Loss
 from lib.models.image_transfer import bins_to_depth, kitti_merge_imgs
 from lib.core.config import cfg
-
+from .mix_transformer import mit_b2
+from .nrd_trans_stage5 import nrd_trans_stage5
 
 class MetricDepthModel(nn.Module):
     def __init__(self):
         super(MetricDepthModel, self).__init__()
         self.loss_names = ['Weighted_Cross_Entropy', 'Virtual_Normal']
-        self.depth_model = DepthModel()
+        self.depth_model = DepthModel_nrd()
 
     def forward(self, data):
         # Input data is a_real, predicted data is b_fake, groundtruth is b_real
@@ -112,6 +114,48 @@ class ModelOptimizer(object):
         loss_all.backward()
         self.optimizer.step()
 
+class ModelOptimizer_adamw(object):
+    def __init__(self, model):
+        super(ModelOptimizer_adamw, self).__init__()
+        encoder_params = []
+        encoder_params_names = []
+        decoder_params = []
+        decoder_params_names = []
+        nograd_param_names = []
+
+        for key, value in dict(model.named_parameters()).items():
+            if value.requires_grad:
+                if 'encoder_modules' in key:
+                    encoder_params.append(value)
+                    encoder_params_names.append(key)
+                else:
+                    decoder_params.append(value)
+                    decoder_params_names.append(key)
+            else:
+                nograd_param_names.append(key)
+
+        lr_encoder = cfg.TRAIN.BASE_LR
+        lr_decoder = cfg.TRAIN.BASE_LR * cfg.TRAIN.SCALE_DECODER_LR
+        weight_decay = 0.01
+        betas = (0.9, 0.999)
+
+        net_params = [
+            {'params': encoder_params,
+             'lr': lr_encoder,
+             'betas': betas,
+             'weight_decay': weight_decay},
+            {'params': decoder_params,
+             'lr': lr_decoder,
+             'betas': betas,
+             'weight_decay': weight_decay},
+            ]
+        self.optimizer = torch.optim.AdamW(net_params)
+    def optim(self, loss):
+        self.optimizer.zero_grad()
+        loss_all = loss['total_loss']
+        loss_all.backward()
+        self.optimizer.step()
+
 
 class DepthModel(nn.Module):
     def __init__(self):
@@ -125,6 +169,21 @@ class DepthModel(nn.Module):
         out_logit, out_softmax = self.decoder_modules(lateral_out, encoder_stage_size)
         return out_logit, out_softmax
 
+class DepthModel_nrd(nn.Module):
+    def __init__(self):
+        super(DepthModel_nrd, self).__init__()
+        self.encoder_modules = mit_b2()
+        if self.training:
+            self.encoder_modules.init_weights(pretrained='/media/bz/D/美团/VNL_Monocular_Depth_Prediction/pretrained/mit_b2.pth')
+        self.decoder_modules = nrd_trans_stage5()
+        self.softmax = nn.Softmax(dim=1)
+    def forward(self, x):
+        b, c, h, w = x.size()
+        features = self.encoder_modules(x)
+        out_logit = self.decoder_modules(features)
+        out_logit = F.interpolate(out_logit, size=(h, w), mode='bilinear', align_corners=False)
+
+        return out_logit, self.softmax(out_logit)
 
 def cal_params(model):
     model_dict = model.state_dict()
