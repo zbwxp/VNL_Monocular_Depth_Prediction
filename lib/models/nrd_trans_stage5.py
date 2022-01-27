@@ -140,23 +140,24 @@ class nrd_trans_stage5(nn.Module):
         self.add_module("cat_norm", norm)
         nn.init.constant_(self.cat_norm.weight, 1)
         nn.init.constant_(self.cat_norm.bias, 0)
-        self.smooth = nn.Sequential(
-            DepthwiseSeparableConvModule(
-                self.num_classes,
-                self.num_classes,
-                3,
-                padding=1,
-                norm_cfg=self.norm_cfg,
-                act_cfg=self.act_cfg),
-            DepthwiseSeparableConvModule(
-                self.num_classes,
-                self.num_classes,
-                3,
-                padding=1,
-                norm_cfg=self.norm_cfg,
-                act_cfg=self.act_cfg)
-        )
+        # self.smooth = nn.Sequential(
+        #     DepthwiseSeparableConvModule(
+        #         self.num_classes,
+        #         self.num_classes,
+        #         3,
+        #         padding=1,
+        #         norm_cfg=self.norm_cfg,
+        #         act_cfg=self.act_cfg),
+        #     DepthwiseSeparableConvModule(
+        #         self.num_classes,
+        #         self.num_classes,
+        #         3,
+        #         padding=1,
+        #         norm_cfg=self.norm_cfg,
+        #         act_cfg=self.act_cfg)
+        # )
 
+        self.out_norm = norm_layer([96,96])
 
     def forward(self, inputs):
         """Forward function."""
@@ -173,7 +174,8 @@ class nrd_trans_stage5(nn.Module):
 
         output = self.classifier(output)
         output = self.interpolate_fast(output, c1_output, self.cat_norm)
-        output = self.smooth(output)
+        # output = self.smooth(output)
+        output = self.out_norm(output)
         return output
 
     def interpolate_fast(self, x, x_cat=None, norm=None):
