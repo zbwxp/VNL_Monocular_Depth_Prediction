@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from mmcv.cnn import ConvModule
+from mmcv.cnn import ConvModule, DepthwiseSeparableConvModule
 from mmcv.cnn.bricks import build_norm_layer
 
 # from .aspp_head import ASPPHead, ASPPModule
@@ -140,6 +140,23 @@ class nrd_trans_stage5(nn.Module):
         self.add_module("cat_norm", norm)
         nn.init.constant_(self.cat_norm.weight, 1)
         nn.init.constant_(self.cat_norm.bias, 0)
+        self.smooth = nn.Sequential(
+            DepthwiseSeparableConvModule(
+                self.num_classes,
+                self.num_classes,
+                3,
+                padding=1,
+                norm_cfg=self.norm_cfg,
+                act_cfg=self.act_cfg),
+            DepthwiseSeparableConvModule(
+                self.num_classes,
+                self.num_classes,
+                3,
+                padding=1,
+                norm_cfg=self.norm_cfg,
+                act_cfg=self.act_cfg)
+        )
+
 
     def forward(self, inputs):
         """Forward function."""
@@ -156,7 +173,7 @@ class nrd_trans_stage5(nn.Module):
 
         output = self.classifier(output)
         output = self.interpolate_fast(output, c1_output, self.cat_norm)
-
+        output = self.smooth(output)
         return output
 
     def interpolate_fast(self, x, x_cat=None, norm=None):
