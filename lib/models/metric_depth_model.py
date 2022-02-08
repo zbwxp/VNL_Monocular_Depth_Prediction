@@ -6,6 +6,7 @@ from . import lateral_net as lateral_net
 from lib.utils.net_tools import get_func
 from lib.models.WCEL_loss import WCEL_Loss
 from lib.models.VNL_loss import VNL_Loss
+from lib.models.TV_loss import TV_Loss
 from lib.models.image_transfer import bins_to_depth, kitti_merge_imgs
 from lib.core.config import cfg
 from .mix_transformer import mit_b2
@@ -62,16 +63,19 @@ class ModelLoss(object):
         super(ModelLoss, self).__init__()
         self.weight_cross_entropy_loss = WCEL_Loss()
         self.virtual_normal_loss = VNL_Loss(focal_x=cfg.DATASET.FOCAL_X, focal_y=cfg.DATASET.FOCAL_Y, input_size=cfg.DATASET.CROP_SIZE)
+        self.smooth_loss = TV_Loss()
 
     def criterion(self, pred_softmax, pred_logit, data, epoch):
         pred_depth = bins_to_depth(pred_softmax)
         loss_metric = self.weight_cross_entropy_loss(pred_logit, data['B_bins'], data['B'].cuda())
         loss_normal = self.virtual_normal_loss(data['B'].cuda(), pred_depth)
+        loss_smooth = self.smooth_loss(data['B'].cuda(), pred_depth)
 
         loss = {}
         loss['metric_loss'] = loss_metric
         loss['virtual_normal_loss'] = cfg.MODEL.DIFF_LOSS_WEIGHT * loss_normal
-        loss['total_loss'] = loss['metric_loss'] + loss['virtual_normal_loss']
+        loss['conditional_smooth_vt_loss'] = loss_smooth
+        loss['total_loss'] = loss['metric_loss'] + loss['virtual_normal_loss'] + loss['conditional_smooth_vt_loss']
         return loss
 
 
